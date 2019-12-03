@@ -180,26 +180,26 @@ public:
     int n_pmax = 1000000
     , int n_upd = 1
     , double t_max = 1 * 24 * 3600    // 1 day (in seconds)
-    , double dt = 60                    // 1 minute (in seconds)
+    , double dt = 60                  // 1 seconds
     , double pdf_thresh = 1e-4
-    , vector<double> dx = { 1000,   // semi-major axis (m)
-                            0.01,   // Eccentricity
-                            0.01,    // Inclination angle (rad)
-                            0.01,    // RAAN (rad)
-                            0.01,    // Argument of perigee (rad) 
-                            6 }  // Time of perigee passage (s), 1 minute
+    , vector<double> dx = { 100,   // semi-major axis (m)
+                            0.001,   // Eccentricity
+                            0.001,   // Inclination angle (rad)
+                            0.001,   // RAAN (rad)
+                            0.001,   // Argument of perigee (rad) 
+                            1 }     // Time of perigee passage (s)
     , vector<double> x0 = { (2000 + 6378) * 1000, // 2000 km altitude (add earth radius)
                             0.1,
                             0.5,
                             0.5,
                             0.5,
                             0 }
-    , vector<double> x0_stdev = { 1000*1000,
-                                  0.02,
-                                  0.1,
-                                  0.1,
-                                  0.1,
-                                  60 }
+    , vector<double> x0_stdev = { 1000,
+                                  0.01,
+                                  0.01,
+                                  0.01,
+                                  0.01,
+                                  1 }
     , int dn = 2
   )
     : GridBayes(6, n_pmax, n_upd, t_max, dt, pdf_thresh, dx, x0, x0_stdev, dn)

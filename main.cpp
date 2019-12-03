@@ -14,7 +14,11 @@ int step_record = 30;
 int step_measure = 120;   // Measurement every orbital period (approx)
 int step_display = 30;
 
-string name_ver = "v3";
+string name_ver = "v4";
+
+double xc_test[6] = { 0,0,0,0,0,0 };
+double xlp[6] = { 0,0,0,0,0,0 };
+double xlc[6] = { 0,0,0,0,0,0 };
 
 int main() {
   
@@ -42,9 +46,15 @@ int main() {
 
   // Record the initial data.
   int count = 0;
-  
+
   string data_file_name = "cpp_sim_data_" + name_ver + "_" + to_string(count) + ".txt";
+
+
+  
   Lor.measurement_update(); // Initial measurement
+  
+
+
   if (RECORD_DATA) {
     Lor.record_data(data_file_name);  // Record the initial dataset
 
@@ -56,6 +66,20 @@ int main() {
     }
     simfile << endl;
   }
+
+  /* cout << "x_sim_pl = ";
+  for (int ii = 0; ii < 6; ii++) {
+    cout << Lor.xs[ii] << " ";
+  }
+  cout << ", time = " << Lor.t_sim;
+  cout << endl;
+
+  Lor.planetary2cartesian(xc_test, Lor.xs, Lor.t_sim);
+  cout << "x_sim_c = ";
+  for (int ii = 0; ii < 6; ii++) {
+    cout << xc_test[ii] << " ";
+  }
+  cout << endl;*/
 
 
   // Start the simulation
@@ -72,7 +96,24 @@ int main() {
     Lor.march_RK4(Lor.xs);        // March the actual system in time
 
     // Measurement update every x steps
-    if (i % (step_measure) == 0) Lor.measurement_update();
+    if (i % (step_measure) == 0) {
+      
+      /*cout << "x_sim_pl = ";
+      for (int ii = 0; ii < 6; ii++) {
+        cout << Lor.xs[ii] << " ";
+      }
+      cout << ", time = " << Lor.t_sim;
+      cout << endl;
+
+      Lor.planetary2cartesian(xc_test, Lor.xs, Lor.t_sim);
+      cout << "x_sim_c = ";
+      for (int ii = 0; ii < 6; ii++) {
+        cout << xc_test[ii] << " ";
+      }
+      cout << endl;*/
+
+      Lor.measurement_update();
+    }
     
     //cout << i << "," << Lor.nn << endl; // debug
 

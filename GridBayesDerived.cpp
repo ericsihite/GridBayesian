@@ -42,10 +42,12 @@ void Planetary::model_f(double* f, const double* x, const double* xh) {
 
   // Calculate true anomaly angle (theta)
   double theta = 2.0 * atan(sqrt((1 + x[1]) / (1 - x[1])) * tan(E / 2.0));
+  double theta1 = 2.0 * atan(sqrt((1 + (x[1]+xh[1])) / (1 - (x[1] + xh[1]) )) * tan(E / 2.0));
 
   // Satellite's linear distance and velocity
   double r = x[0] * (1 - x[1] * x[1]) / (1 + x[1] * cos(theta));
   double v = sqrt(MU * (2.0 / r - 1.0 / x[0]));
+  double v0 = sqrt(MU * (2.0 / r - 1.0 / (x[0] + xh[0])));
 
   // Satellite's ballistic coefficient (or space junk)
   double Bc = SJ_CD * SJ_S / 2.0 / SJ_M;
@@ -53,30 +55,39 @@ void Planetary::model_f(double* f, const double* x, const double* xh) {
   // Determine the atmospheric density (input: altitude in km)
   double rho = interpolate_atm_data((r - R_E) / 1000.0);
 
-  // Calculate the perturbation
+  // Calculate the atmospheric perturbation
+  /*
   f[0] += -2 * n * x[0] * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU * rho * v * v * Bc;
   f[1] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU
     * rho * v * v * Bc * (cos(theta) + cos(E));
   f[4] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU / x[1]
     * rho * v * v * Bc * (1 + r / p) * sin(theta);
+  */
+
+  double n0 = sqrt(MU / pow(x[0],3));
+
+  f[0] += -2 * n0 * pow(x[0],3) * sqrt(1 - x[1] * x[1]) / MU * rho * v0 * v0 * Bc;
+  f[1] += -n * x[0] * x[0] * sqrt(1 - pow(x[1]+xh[1],2)) / MU
+    * rho * v * v * Bc * (cos(theta1) + cos(E));
+  f[4] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU / x[1]
+    * rho * v * v * Bc * (1 + r / p) * sin(theta);
 
   // Last step: transform dM/dt into dt0/dt
-  f[5] = 1 - f[5] / n - 1.5 / x[0] * (t_sim - x[5]) * f[0];
+  f[5] = 1 - f[5] / n - 1.5 / x[0] * (t_sim - (x[5]+xh[5])) * f[0];
 
-  
 }
 
 double Planetary::measurement_model_pdf(int id) {
 
   // Standard deviation of the measurements
-  double stdev_pos = 1000;  // m
-  double stdev_vel = 10;    // m/s
+  double stdev_pos = 10000;  // m
+  double stdev_vel = 100;   // m/s
 
   // If the first element in the list, determine the simulated cartesian 
   // position and speed. This will be the measured position and velocity.
   if (id == 0) {
     planetary2cartesian(xs_cartesian, xs, t_sim);
-    return 0; // The 1st element of the list is an empty node
+    return 0; // The 1st element of the list is an empty node, pdf = 0
   }
 
   // Determine the cartesian position and velocity if the list at [id].
@@ -86,21 +97,26 @@ double Planetary::measurement_model_pdf(int id) {
   planetary2cartesian(xl_cartesian, xl_planetary, t_sim);
 
   // Calculate pdf based on the Gaussian noise model in Cartesian coordinates.
-// The pdf will be normalized later so that their sum = 1, so no scaling here.
-// Assume diagonal covariance matrix.
+  // The pdf will be normalized later so that their sum = 1, so no scaling here.
+  // Assume diagonal covariance matrix.
   double pdf = 0;
 
   // Position
+  double dx = 0;
   for (int it = 0; it < 3; it++) {
-    pdf += exp(-pow(xs_cartesian[it] - xl_cartesian[it], 2)
-      / 2.0 / stdev_pos / stdev_pos);
+    dx += pow(xs_cartesian[it] - xl_cartesian[it], 2);
   }
-
+  
+  pdf = exp( -dx / 2.0 / stdev_pos / stdev_pos );
+  //cout << pdf << endl;
+  
   // Velocity
+  /*
   for (int it = 3; it < 6; it++) {
     pdf += exp(-pow(xs_cartesian[it] - xl_cartesian[it], 2)
       / 2.0 / stdev_vel / stdev_vel);
   }
+  */
 
   return pdf;
 }
@@ -126,13 +142,16 @@ void Planetary::planetary2cartesian(double* xc, const double* xp, double t) {
   double df_nr = 1 - xp[1] * cos(E);
   int counter_nr = 0; // just in case
 
+  //cout << "abs(f) = " << abs(f_nr) << ", ";
+
   // Newton-Raphson iterative method
-  while (abs(f_nr) < tol && counter_nr < 100) {
+  while (abs(f_nr) > tol) {
     E -= f_nr / df_nr;
     f_nr = E - xp[1] * sin(E) - M;
     df_nr = 1 - xp[1] * cos(E);
     counter_nr++;
   }
+  //cout << "E = "  << E << ", f = " << f_nr << endl;
 
   // Calculate the true anomaly angle (theta)
   double theta = 2.0 * atan(sqrt((1 + xp[1]) / (1 - xp[1])) * tan(E / 2.0));

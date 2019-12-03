@@ -551,8 +551,15 @@ void GridBayes::march_PDF() {
   }
 
   // Time march
+  double sum = 0; // PDF sum for normalization
   for (ll = 1; ll < nn; ll++) {
     list.pdf[ll] += DT * rhs[ll];
+    sum += list.pdf[ll];
+  }
+
+  // Normalize PDF
+  for (ll = 1; ll < nn; ll++) {
+    list.pdf[ll] /= sum;
   }
 
   // Free memory
@@ -581,8 +588,6 @@ void GridBayes::measurement_update() {
     meas_pdf = measurement_model_pdf(i);
     list.pdf[i] *= meas_pdf;  // Multiply grid pdf with measurement pdf
     sum += list.pdf[i];
-
-    
   }
 
   // Normalize PDF (sum of all pdf in the list = 1)
