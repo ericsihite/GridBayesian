@@ -181,7 +181,7 @@ public:
     , int n_upd = 1
     , double t_max = 1 * 24 * 3600    // 1 day (in seconds)
     , double dt = 60                  // 1 seconds
-    , double pdf_thresh = 1e-4
+    , double pdf_thresh = 1e-5
     , vector<double> dx = { 100,   // semi-major axis (m)
                             0.001,   // Eccentricity
                             0.001,   // Inclination angle (rad)

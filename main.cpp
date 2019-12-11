@@ -11,10 +11,10 @@ MAIN.CPP
 
 // 1 step = 1 minutes for planetary. Typical LEO orbital period = 1.5 to 2 hrs
 int step_record = 30;         
-int step_measure = 120;   // Measurement every orbital period (approx)
+int step_measure = 1200000;   // Measurement every orbital period (approx)
 int step_display = 30;
 
-string name_ver = "v4";
+string name_ver = "v7";
 
 double xc_test[6] = { 0,0,0,0,0,0 };
 double xlp[6] = { 0,0,0,0,0,0 };
@@ -89,9 +89,10 @@ int main() {
   double timer1 = 0;
   double timer2 = 0;
 
-  for (int i = 1; i <= Lor.T_MAX / Lor.DT; i++) {
+  Lor.modify_list();            // Rearrange list and add points
 
-    Lor.modify_list();            // Rearrange list and add points
+  for (int i = 1; i <= Lor.T_MAX / Lor.DT; i++) {
+    //Lor.modify_list();            // Rearrange list and add points
     Lor.march_PDF();              // March the PDF in time
     Lor.march_RK4(Lor.xs);        // March the actual system in time
 
@@ -114,7 +115,10 @@ int main() {
 
       Lor.measurement_update();
     }
+    Lor.modify_list();            // Rearrange list and add points
     
+    //cout << Lor.list.pdf[0] << endl;
+
     //cout << i << "," << Lor.nn << endl; // debug
 
     // Display data to the console every x steps

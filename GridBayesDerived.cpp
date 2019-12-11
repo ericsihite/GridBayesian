@@ -15,6 +15,7 @@ void Planetary::model_f(double* f, const double* x, const double* xh) {
   f[4] = 0;
   f[5] = n; // dM/dt, temporary
 
+  
   // J2 perturbation
   f[3] += -3.0 / 2.0 * n * J2 * (R_E / p) * (R_E / p) * cos(x[2]);
   f[4] += -3.0 / 4.0 * n * J2 * (R_E / p) * (R_E / p) *
@@ -22,63 +23,74 @@ void Planetary::model_f(double* f, const double* x, const double* xh) {
   f[5] += 3.0 / 4.0 * n * J2 * (R_E / x[0]) * (R_E / x[0]) /
     pow(1 - x[1] * x[1], 1.5) * (2 - 3 * sin(x[2]) * sin(x[2]));
 
-  // Atmospheric drag perturbation
+  if (0) {
+    // Atmospheric drag perturbation
 
-  // M = mean anomaly. Limit M to +- pi
-  double M = n * (t_sim - x[5]);
-  while (M > PI) M -= 2 * PI;
-  while (M < -PI) M += 2 * PI;
+    // M = mean anomaly. Limit M to +- pi
+    double M = n * (t_sim - x[5]);
+    while (M > PI) M -= 2 * PI;
+    while (M < -PI) M += 2 * PI;
 
-  // Solve for eccentric anomaly angle (E) from M using Newton-Raphson
-  double tol = 1e-6;
-  double E = 0;
-  double ff = -M;
-  double dff = 1 - x[1];
-  while (abs(ff) > tol) {
-    E = E - ff / dff;
-    ff = E - x[1] * sin(E) - M;
-    dff = 1 - x[1] * cos(E);
+    // Solve for eccentric anomaly angle (E) from M using Newton-Raphson
+    double tol = 1e-6;
+    double E = 0;
+    double ff = -M;
+    double dff = 1 - x[1];
+    while (abs(ff) > tol) {
+      E = E - ff / dff;
+      ff = E - x[1] * sin(E) - M;
+      dff = 1 - x[1] * cos(E);
+    }
+
+    // Calculate true anomaly angle (theta)
+    double theta = 2.0 * atan(sqrt((1 + x[1]) / (1 - x[1])) * tan(E / 2.0));
+    double theta1 = 2.0 * atan(sqrt((1 + (x[1] + xh[1])) / (1 - (x[1] + xh[1]))) * tan(E / 2.0));
+
+    // Satellite's linear distance and velocity
+    double r = x[0] * (1 - x[1] * x[1]) / (1 + x[1] * cos(theta));
+    double r0 = (x[0] + xh[0]) * (1 - x[1] * x[1]) / (1 + x[1] * cos(theta));
+    double r1 = (x[0]) * (1 - pow(x[1] + xh[1], 2)) / (1 + (x[1] + xh[1]) * cos(theta1));
+
+    double v = sqrt(MU * (2.0 / r - 1.0 / x[0]));
+    double v0 = sqrt(MU * (2.0 / r0 - 1.0 / (x[0] + xh[0])));
+    double v1 = sqrt(MU * (2.0 / r1 - 1.0 / x[0]));
+
+    // Satellite's ballistic coefficient (or space junk)
+    double Bc = SJ_CD * SJ_S / 2.0 / SJ_M;
+
+    // Determine the atmospheric density (input: altitude in km)
+    double rho = interpolate_atm_data((r - R_E) / 1000.0);
+    double rho0 = interpolate_atm_data((r0 - R_E) / 1000.0);
+    double rho1 = interpolate_atm_data((r1 - R_E) / 1000.0);
+
+    // Calculate the atmospheric perturbation
+    /*
+    f[0] += -2 * n * x[0] * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU * rho * v * v * Bc;
+    f[1] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU
+      * rho * v * v * Bc * (cos(theta) + cos(E));
+    f[4] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU / x[1]
+      * rho * v * v * Bc * (1 + r / p) * sin(theta);
+    */
+
+    double n0 = sqrt(MU / pow(x[0] + xh[0], 3));
+
+
+    f[0] += -2 * n0 * pow(x[0] + xh[0], 3) * sqrt(1 - x[1] * x[1])
+      / MU * rho0 * v0 * v0 * Bc;
+    f[1] += -n * x[0] * x[0] * sqrt(1 - pow(x[1] + xh[1], 2)) / MU
+      * rho1 * v1 * v1 * Bc * (cos(theta1) + cos(E));
+    f[4] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU / x[1]
+      * rho * v * v * Bc * (1 + r / p) * sin(theta);
   }
 
-  // Calculate true anomaly angle (theta)
-  double theta = 2.0 * atan(sqrt((1 + x[1]) / (1 - x[1])) * tan(E / 2.0));
-  double theta1 = 2.0 * atan(sqrt((1 + (x[1]+xh[1])) / (1 - (x[1] + xh[1]) )) * tan(E / 2.0));
-
-  // Satellite's linear distance and velocity
-  double r = x[0] * (1 - x[1] * x[1]) / (1 + x[1] * cos(theta));
-  double v = sqrt(MU * (2.0 / r - 1.0 / x[0]));
-  double v0 = sqrt(MU * (2.0 / r - 1.0 / (x[0] + xh[0])));
-
-  // Satellite's ballistic coefficient (or space junk)
-  double Bc = SJ_CD * SJ_S / 2.0 / SJ_M;
-
-  // Determine the atmospheric density (input: altitude in km)
-  double rho = interpolate_atm_data((r - R_E) / 1000.0);
-
-  // Calculate the atmospheric perturbation
-  /*
-  f[0] += -2 * n * x[0] * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU * rho * v * v * Bc;
-  f[1] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU
-    * rho * v * v * Bc * (cos(theta) + cos(E));
-  f[4] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU / x[1]
-    * rho * v * v * Bc * (1 + r / p) * sin(theta);
-  */
-
-  double n0 = sqrt(MU / pow(x[0],3));
-
-  f[0] += -2 * n0 * pow(x[0],3) * sqrt(1 - x[1] * x[1]) / MU * rho * v0 * v0 * Bc;
-  f[1] += -n * x[0] * x[0] * sqrt(1 - pow(x[1]+xh[1],2)) / MU
-    * rho * v * v * Bc * (cos(theta1) + cos(E));
-  f[4] += -n * x[0] * x[0] * sqrt(1 - x[1] * x[1]) / MU / x[1]
-    * rho * v * v * Bc * (1 + r / p) * sin(theta);
-
   // Last step: transform dM/dt into dt0/dt
-  f[5] = 1 - f[5] / n - 1.5 / x[0] * (t_sim - (x[5]+xh[5])) * f[0];
+  f[5] = 1 - f[5] / n - 1.5 / x[0] * (t_sim - (x[5] + xh[5])) * f[0];
 
 }
 
 double Planetary::measurement_model_pdf(int id) {
 
+  /**/
   // Standard deviation of the measurements
   double stdev_pos = 10000;  // m
   double stdev_vel = 100;   // m/s
@@ -104,19 +116,12 @@ double Planetary::measurement_model_pdf(int id) {
   // Position
   double dx = 0;
   for (int it = 0; it < 3; it++) {
-    dx += pow(xs_cartesian[it] - xl_cartesian[it], 2);
+    dx += pow(xs_cartesian[it] - xl_cartesian[it], 2.0);
   }
   
   pdf = exp( -dx / 2.0 / stdev_pos / stdev_pos );
   //cout << pdf << endl;
   
-  // Velocity
-  /*
-  for (int it = 3; it < 6; it++) {
-    pdf += exp(-pow(xs_cartesian[it] - xl_cartesian[it], 2)
-      / 2.0 / stdev_vel / stdev_vel);
-  }
-  */
 
   return pdf;
 }

@@ -103,7 +103,8 @@ void GridBayes::initialize() {
 void GridBayes::initialize_vn(int b) {
 
   double* x_pos = new double[N_DIM];
-  
+
+  // Half step forward dx
   double* xh = new double[N_DIM];
   for (int i = 0; i < N_DIM; i++) {
     xh[i] = DX[i] / 2.0;
@@ -112,7 +113,7 @@ void GridBayes::initialize_vn(int b) {
   // Initialize v, v+, v-
   for (int l = b; l < nn; l++) {
 
-    // v = process model
+    // v = process model, half step forward
     for (int i = 0; i < N_DIM; i++) {
       x_pos[i] = list.pos[l][i] * DX[i];
     }
@@ -256,7 +257,12 @@ void GridBayes::modify_list() {
       }
       else {
         // 1 indicates the pointer has a big neighbor
-        list.f[list.ns[ll][d]][0] = 1;  
+        // Check for the upwind flow as well.
+
+        
+
+
+        list.f[list.ns[ll][d]][0] = 1;
       }
 
       // If no big neighbor, create one.
@@ -294,7 +300,7 @@ void GridBayes::modify_list() {
 
         }
         else {
-          list.f[list.ns[list.ns[ll][e]][d]][0] = 1;
+          list.f[ list.ns[ list.ns[ll][e] ][d] ][0] = 1;
         }
 
         // Small-big corner
@@ -314,7 +320,7 @@ void GridBayes::modify_list() {
         }
 
         // Big-small corner
-        if (  list.nb[list.ns[ll][e]][d] == 0) {
+        if (  list.nb[list.ns[ll][e]][d] == 0 ) {
 
           if (list.vp[list.ns[ll][e]][d] > 0) {
             for (int j = 0; j < N_DIM; j++) {
@@ -350,6 +356,7 @@ void GridBayes::modify_list() {
   }
 
   // Delete small elements not neighboring the big elements
+  // and also not in the upwind direction.
 
   ll = mm + 1;
   bool is_zero = false;
@@ -357,7 +364,7 @@ void GridBayes::modify_list() {
   while (ll < nn) {
 
     if (list.f[ll][0] < 1) {
-      // Not neighboring large element. 
+      // Not neighboring large element.
       // Swap with the last element and then delete entry.
 
       // Update pointer
@@ -483,16 +490,22 @@ void GridBayes::march_RK4(double* x) {
 void GridBayes::march_PDF() {
 
   int ll = 0;
-  int i = 0;
-  int j = 0;
-  double flux = 0;
+  int n1 = 0;
+  int n2 = 0;
+  int n3 = 0;
+  int n4 = 0;
+  double flux1 = 0;
+  double flux2 = 0;
+  double flux3 = 0;
   double temp = 0;
   double theta = 0;
   double* rhs = new double[nn];
   rhs[0] = 0;
   
 
-  // Calculate flux terms
+  /*
+
+  // Calculate the initial flux terms, 1 dim
   for (ll = 1; ll < nn; ll++) {
     for (int d = 0; d < N_DIM; d++) {
       list.f[ll][d] = list.vp[ll][d] * list.pdf[ll] + 
@@ -501,17 +514,18 @@ void GridBayes::march_PDF() {
     rhs[ll] = 0;
   }
 
+  // Corner Transport Upwind (CTU), 2 dim
   for (int d = 0; d < N_DIM; d++) {
     for (ll = 1; ll < nn; ll++) {
       
-      i = list.ns[ll][d];
+      i = list.ns[ll][d]; // Small neighbor
 
       // Big pdf entries only
       if (ll <= mm || (i > 0 && i <= mm)) {
 
         flux = DT * (list.pdf[ll] - list.pdf[i]) / (2 * DX[d]);
         
-        // Compute corner transport upwind (CTU) flux terms
+        // Compute CTU flux terms
         for (int e = 0; e < N_DIM; e++) {
           if (e != d) {
             list.f[ll][e] -= list.vp[ll][e] * list.vp[i][d] * flux;
@@ -546,7 +560,162 @@ void GridBayes::march_PDF() {
   // Calculate RHS of the PDF equation
   for (ll = 1; ll < nn; ll++) {
     for (int d = 0; d < N_DIM; d++) {
-      rhs[ll] -= (list.f[ll][d] - list.f[list.ns[ll][d]][d]) / DX[d];
+      rhs[ll] -= (list.f[ll][d] - list.f[ list.ns[ll][d] ][d]) / DX[d];
+    }
+  }
+
+  */
+
+  // Calculate the initial flux terms, 1 dim
+  for (ll = 1; ll < nn; ll++) {
+    for (int d = 0; d < N_DIM; d++) {
+      list.f[ll][d] = list.vp[ll][d] * list.pdf[ll] +
+        list.vn[ll][d] * list.pdf[ list.nb[ll][d] ];
+    }
+    rhs[ll] = 0;
+  }
+
+  // Corner Transport Upwind (CTU)
+  for (int d1 = 0; d1 < N_DIM; d1++) {
+    for (ll = 1; ll < nn; ll++) {
+
+      n1 = list.ns[ll][d1]; // Small neighbor
+
+      // Big pdf entries only
+      if (ll <= mm || (n1 > 0 && n1 <= mm)) {
+
+        // Compute CTU flux terms, 2 dim corners--------------------------------
+
+        // Half flux across d1
+        flux1 = DT * (list.pdf[ll] - list.pdf[n1]) / (2.0 * DX[d1]);
+
+        for (int d2 = 0; d2 < N_DIM; d2++) {
+          if (d2 != d1) {
+
+
+            n2 = list.ns[ll][d2];
+
+            // pp
+            list.f[ll][d2] -= list.vp[ll][d2] * list.vp[n1][d1] * flux1;
+
+            // np
+            list.f[n2][d2] -= list.vn[n2][d2] * list.vp[n1][d1] * flux1;
+
+            n2 = list.ns[n1][d2];
+
+            // pn
+            list.f[n1][d2] -= list.vp[n1][d2] * list.vn[n1][d1] * flux1;
+
+            // nn
+            list.f[n2][d2] -= list.vn[n2][d2] * list.vn[n1][d1] * flux1;
+          }
+        }
+
+        // Compute 2nd order correction flux term
+        if (list.v[n1][d1] > 0) {
+          theta = (list.pdf[n1] - list.pdf[list.ns[n1][d1]]) /
+            (list.pdf[ll] - list.pdf[n1]);
+        }
+        else {
+          theta = (list.pdf[list.nb[ll][d1]] - list.pdf[ll]) /
+            (list.pdf[ll] - list.pdf[n1]);
+        }
+
+        // Flux limiter function. MC or VL.
+        temp = abs(list.v[n1][d1]);
+        list.f[n1][d1] += temp * (DX[d1] / DT - temp)
+          * flux1 * flux_limiter(theta);
+
+        // Compute CTU flux terms, 3 dim corners -------------------------------
+
+        if (0) {
+
+          for (int d2 = 0; d2 < N_DIM; d2++) {
+
+            n2 = list.ns[ll][d2];
+            n3 = list.ns[n2][d1];
+
+            // Half flux across d1 & d2
+            flux1 = list.pdf[ll] - list.pdf[n1];
+            flux2 = list.pdf[n2] - list.pdf[n3];
+            flux3 = (flux1 - flux2) * DT * DT / (3.0 * DX[d1] * DX[d2]);
+
+            for (int d3 = 0; d3 < N_DIM; d3++) {
+
+              if (d1 != d2 && d1 != d3 && d2 != d3) { // All unique axis
+
+                //  n1 -- ll
+                //   |    |
+                //  n3 -- n2
+                //  n4 = 3rd dimension points
+
+                // ------------------
+                n4 = list.ns[ll][d3]; // ll
+
+                // ppp 
+                list.f[ll][d3] +=
+                  list.vp[ll][d3] * list.vp[n2][d2] * list.vp[n1][d1] * flux3;
+
+                // npp
+                list.f[n4][d3] +=
+                  list.vn[n4][d3] * list.vp[n2][d2] * list.vp[n1][d1] * flux3;
+
+                // ------------------
+                n4 = list.ns[n1][d3]; // n1
+
+                // ppn
+                list.f[n1][d3] +=
+                  list.vp[n1][d3] * list.vp[n3][d2] * list.vn[n1][d1] * flux3;
+
+                // npn
+                list.f[n4][d3] +=
+                  list.vn[n4][d3] * list.vp[n3][d2] * list.vn[n1][d1] * flux3;
+
+                // ------------------              
+                n4 = list.ns[n2][d3]; // n2
+
+                // pnp
+                list.f[n2][d3] +=
+                  list.vp[n2][d3] * list.vn[n2][d2] * list.vp[n3][d1] * flux3;
+
+                // nnp
+                list.f[n4][d3] +=
+                  list.vn[n4][d3] * list.vn[n2][d2] * list.vp[n3][d1] * flux3;
+
+
+                // ------------------   
+                n4 = list.ns[n3][d3]; // n3
+
+                // pnn
+                list.f[n3][d3] +=
+                  list.vp[n3][d3] * list.vn[n3][d2] * list.vn[n3][d1] * flux3;
+
+                // nnn
+                list.f[n4][d3] +=
+                  list.vn[n4][d3] * list.vn[n3][d2] * list.vn[n3][d1] * flux3;
+
+              }
+            } // end for d3
+
+            // Flux correction? q_xxy, etc?
+
+
+
+          } // end for d2
+
+          // Flux correction? q_xxx, etc?
+
+
+        } // if(1/0)
+
+      } // active cell only
+    } // end for ll
+  } // end for d1
+
+  // Calculate RHS of the PDF equation
+  for (ll = 1; ll < nn; ll++) {
+    for (int d = 0; d < N_DIM; d++) {
+      rhs[ll] -= (list.f[ll][d] - list.f[ list.ns[ll][d] ][d]) / DX[d];
     }
   }
 
@@ -591,7 +760,7 @@ void GridBayes::measurement_update() {
   }
 
   // Normalize PDF (sum of all pdf in the list = 1)
-  for (int i = 0; i < nn; i++) {
+  for (int i = 1; i < nn; i++) {
     list.pdf[i] /= sum;
   }
 
@@ -648,7 +817,7 @@ void GridBayes::record_data(string file_name) {
 
 	myfile << "GBEES Data." << endl;
 
-	for (int i = 0; i < nn; i++) {
+	for (int i = 0; i < mm; i++) {
 		
 		// PDF
     if (i == 0) myfile << t_sim;  // 1st line = time stamp
@@ -657,12 +826,17 @@ void GridBayes::record_data(string file_name) {
 		// Position
 		for (int j = 0; j < N_DIM; j++) {
 
-      if (i == 0)   myfile << "," << nn;  // 1st line = total list size
+      if (i == 0) {
+        // 1st line: record misc data
+        if (j == 0) myfile << "," << nn;  // total list size
+        else myfile << "," << mm;  // active list size
+      }
       else 			    myfile << "," << list.pos[i][j];  // state value
 
 		}
 
 		// Neighbors: nb, ns
+    /*
 		for (int j = 0; j < N_DIM; j++) {
 
       if (i == 0)   myfile << "," << mm; // 1st line = major pdf list size
@@ -689,6 +863,7 @@ void GridBayes::record_data(string file_name) {
 		for (int j = 0; j < N_DIM; j++) {
 			myfile << "," << list.f[i][j];
 		}
+    */
 
 		myfile << endl;
 	}
